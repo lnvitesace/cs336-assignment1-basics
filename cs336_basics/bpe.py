@@ -176,7 +176,7 @@ def train_bpe(
         vocab[len(vocab)] = tok.encode("utf8")
     merges: list[tuple[bytes, bytes]] = []
 
-    counts = pre_tokenize_file(input_path, special_tokens, 4)
+    counts = pre_tokenize_file(input_path, special_tokens, 20)
     pair_counts, pair_to_words = count_pairs(counts)
 
     # --- Merge until vocab size reached ---
@@ -190,14 +190,9 @@ def train_bpe(
     return vocab, merges
 
 
-def train_bpe_tinystories():
-    vocab, _ = train_bpe("data/TinyStoriesV2-GPT4-train.txt", 10000, ["<|endoftext|>"])
-    print(vocab)
-
-
 if __name__ == "__main__":
-    import ast
+    import pickle
 
-    with open("vocab.txt") as f:
-        vocab = ast.literal_eval(f.read())
-    print(max(vocab.values(), key=lambda x: len(x)))
+    vocab, merges = train_bpe("data/owt_train.txt", 10000, ["<|endoftext|>"])
+    with open("data/owt_result", "wb") as f:
+        pickle.dump({"vocab": vocab, "merges": merges}, f)
