@@ -188,3 +188,16 @@ def train_bpe(
         vocab[len(vocab)] = merge[0] + merge[1]
         counts, pair_counts, pair_to_words = apply_merge(counts, pair_counts, merge, pair_to_words)
     return vocab, merges
+
+
+def train_bpe_tinystories():
+    vocab, _ = train_bpe("data/TinyStoriesV2-GPT4-train.txt", 10000, ["<|endoftext|>"])
+    print(vocab)
+
+
+if __name__ == "__main__":
+    import ast
+
+    with open("vocab.txt") as f:
+        vocab = ast.literal_eval(f.read())
+    print(max(vocab.values(), key=lambda x: len(x)))
