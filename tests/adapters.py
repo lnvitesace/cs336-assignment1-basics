@@ -1,4 +1,5 @@
 from __future__ import annotations
+from cs336_basics.bpe import train_bpe
 
 import os
 from collections.abc import Iterable
@@ -8,6 +9,8 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
+import regex as re
+from collections import Counter
 
 
 def run_linear(
@@ -562,6 +565,60 @@ def get_tokenizer(
     raise NotImplementedError
 
 
+PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
+
+def pre_tokenize(chunk: str) -> Counter[tuple[bytes, ...]]:
+    """Split text with the GPT-2 regex and count each pre-token as a tuple of single bytes."""
+    counts = Counter()
+    for m in re.finditer(PAT, chunk):
+        token = m.group().encode("utf8")
+        counts[tuple(bytes([b]) for b in token)] += 1
+    return counts
+
+
+def pre_tokenize_chunk(input_path: str, start: int, end: int, special_tokens: list[str]) -> Counter:
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start).decode("utf-8", errors="ignore")
+    if special_tokens:
+        split_pattern = "|".join(re.escape(tok) for tok in special_tokens)
+        segments = re.split(split_pattern, chunk)
+    else:
+        segments = [chunk]
+
+    counts = Counter()
+    for seg in segments:
+        counts.update(pre_tokenize(seg))
+    return counts
+
+
+def merge_word(word: tuple[bytes, ...], pair: tuple[bytes, bytes], merged: bytes) -> tuple[bytes, ...]:
+    """Replace every non-overlapping occurrence of `pair` in `word` with `merged`, left to right."""
+    first, second = pair
+    new_word, i, n = [], 0, len(word)
+    while i < n:
+        if i < n - 1 and word[i] == first and word[i + 1] == second:
+            new_word.append(merged)
+            i += 2
+        else:
+            new_word.append(word[i])
+            i += 1
+    return tuple(new_word)
+
+
+def apply_merge(counts: Counter[tuple[bytes, ...]], pair: tuple[bytes, bytes]) -> Counter[tuple[bytes, ...]]:
+    """Apply one merge to every pre-token and return the updated counts."""
+    merged = pair[0] + pair[1]
+    new_counts = Counter()
+    for word, freq in counts.items():
+        if pair[0] not in word:
+            new_counts[word] = freq
+        else:
+            new_counts[merge_word(word, pair, merged)] += freq
+    return new_counts
+
+
 def run_train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
@@ -589,4 +646,4 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    return train_bpe(input_path, vocab_size, special_tokens)
